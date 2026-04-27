@@ -1,0 +1,369 @@
+# Mechanized abstract-model obligations.
+#
+# These records deliberately do not claim source-level conformance. They bind
+# requirement/scenario ledger entries to named Quint/Apalache actions and
+# invariants so model drift is caught by the checkers.
+
+[[formal_model]]
+id = "serde-doc-null-schema-deserialize-installs"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/serde_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteSerdeApi"
+init = "initDoc"
+step = "step"
+invariants = ["successfulDeserializeInstalls"]
+requirement_ids = ["SQLITE-CAPI-DESERIALIZE-NULL-SCHEMA-MAIN"]
+scenario_ids = ["SERDE-DESERIALIZE-NULL-SCHEMA-MAIN"]
+divergence_cases = []
+
+[[formal_model]]
+id = "serde-doc-attached-schema-deserialize-installs"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/serde_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteSerdeApi"
+init = "initDoc"
+step = "step"
+invariants = ["successfulDeserializeInstalls"]
+requirement_ids = ["SQLITE-CAPI-DESERIALIZE-ATTACHED-SCHEMA-SUCCESS"]
+scenario_ids = ["SERDE-DESERIALIZE-ATTACHED-SCHEMA-SUCCESS"]
+divergence_cases = []
+
+[[formal_model]]
+id = "serde-doc-temp-schema-error-does-not-install"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/serde_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteSerdeApi"
+init = "initDoc"
+step = "step"
+invariants = ["schemaErrorsDoNotInstall"]
+requirement_ids = ["SQLITE-CAPI-DESERIALIZE-TEMP-ERROR"]
+scenario_ids = ["SERDE-DESERIALIZE-TEMP-ERROR"]
+divergence_cases = []
+
+[[formal_model]]
+id = "serde-impl-missing-schema-error-does-not-install"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/serde_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteSerdeApi"
+init = "initDoc"
+step = "step"
+invariants = ["schemaErrorsDoNotInstall"]
+requirement_ids = ["SQLITE-CAPI-DESERIALIZE-MISSING-SCHEMA-ERROR"]
+scenario_ids = ["SERDE-DESERIALIZE-MISSING-SCHEMA-ERROR"]
+divergence_cases = []
+
+[[formal_model]]
+id = "serde-impl-api-armor-negative-sizes"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/serde_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteSerdeApi"
+init = "initDoc"
+step = "step"
+invariants = ["apiArmorNegativeSizesReturnMisuse"]
+requirement_ids = ["SQLITE-CAPI-DESERIALIZE-NEGATIVE-SIZES-API-ARMOR"]
+scenario_ids = ["SERDE-DESERIALIZE-NEGATIVE-SIZES-API-ARMOR"]
+divergence_cases = []
+
+[[formal_model]]
+id = "serde-doc-readonly-read-write"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/serde_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteSerdeApi"
+init = "initDoc"
+step = "step"
+invariants = ["readonlyWriteRequiresReadonlyDeserialize"]
+requirement_ids = ["SQLITE-CAPI-DESERIALIZE-READONLY"]
+scenario_ids = ["SERDE-DESERIALIZE-READONLY-READ-WRITE"]
+divergence_cases = []
+
+[[formal_model]]
+id = "serde-doc-resizeable-growth"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/serde_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteSerdeApi"
+init = "initDoc"
+step = "step"
+invariants = ["resizeableGrowthRequiresResizeableDeserialize"]
+requirement_ids = ["SQLITE-CAPI-DESERIALIZE-RESIZEABLE-GROWTH"]
+scenario_ids = ["SERDE-DESERIALIZE-RESIZEABLE-GROWTH"]
+divergence_cases = []
+
+[[formal_model]]
+id = "serde-doc-wal-image-cantopen"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/serde_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteSerdeApi"
+init = "initDoc"
+step = "step"
+invariants = ["walImageUseFailsCantopen"]
+requirement_ids = ["SQLITE-CAPI-DESERIALIZE-WAL-IMAGE-CANTOPEN"]
+scenario_ids = ["SERDE-DESERIALIZE-WAL-IMAGE-CANTOPEN"]
+divergence_cases = []
+
+[[formal_model]]
+id = "serde-doc-busy-conflicts-return-busy"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/serde_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteSerdeApi"
+init = "initDoc"
+step = "step"
+invariants = ["docBusyConflictsReturnBusy"]
+requirement_ids = []
+scenario_ids = ["SERDE-DESERIALIZE-ACTIVE-READ-TXN-BUSY", "SERDE-DESERIALIZE-ACTIVE-BACKUP-BUSY"]
+divergence_cases = []
+
+[[formal_model]]
+id = "serde-doc-busy-conflicts-do-not-install"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/serde_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteSerdeApi"
+init = "initDoc"
+step = "step"
+invariants = ["docBusyConflictsDoNotInstall"]
+requirement_ids = []
+scenario_ids = ["SERDE-DESERIALIZE-ACTIVE-READ-TXN-BUSY", "SERDE-DESERIALIZE-ACTIVE-BACKUP-BUSY"]
+divergence_cases = []
+
+[[formal_model]]
+id = "serde-doc-nonresizeable-growth-limit"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/serde_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteSerdeApi"
+init = "initDoc"
+step = "step"
+invariants = ["nonresizeableRejectionRequiresBoundedGrowth"]
+requirement_ids = ["SQLITE-CAPI-DESERIALIZE-NONRESIZEABLE-GROWTH-LIMIT"]
+scenario_ids = ["SERDE-DESERIALIZE-NONRESIZEABLE-GROWTH-LIMIT"]
+divergence_cases = []
+
+[[formal_model]]
+id = "serde-doc-freeonclose-failure-error"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/serde_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteSerdeApi"
+init = "initDoc"
+step = "step"
+invariants = ["docFreeOnCloseFailureReturnsError", "noSuccessfulDeserializeAfterFreeOnCloseFailure"]
+requirement_ids = ["SQLITE-CAPI-DESERIALIZE-FREEONCLOSE-FAILURE-FREES-PDATA"]
+scenario_ids = ["SERDE-DESERIALIZE-FREEONCLOSE-FAILURE-FREES-PDATA"]
+divergence_cases = []
+
+[[formal_model]]
+id = "lifecycle-doc-finalize-null-noop"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/lifecycle_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteLifecycleApi"
+init = "initDoc"
+step = "step"
+invariants = ["lifecycleFinalizeNullNoOp"]
+requirement_ids = ["R-57228-12904"]
+scenario_ids = []
+divergence_cases = []
+
+[[formal_model]]
+id = "lifecycle-doc-close-null-noop"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/lifecycle_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteLifecycleApi"
+init = "initDoc"
+step = "step"
+invariants = ["lifecycleCloseNullNoOp"]
+requirement_ids = ["R-63257-11740"]
+scenario_ids = []
+divergence_cases = []
+
+[[formal_model]]
+id = "lifecycle-doc-close-live-stmt-busy-then-close"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/lifecycle_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteLifecycleApi"
+init = "initDoc"
+step = "step"
+invariants = ["lifecycleCloseLiveStmtPath"]
+requirement_ids = ["SQLITE-CAPI-CLOSE-LIVE-STMT"]
+scenario_ids = []
+divergence_cases = []
+
+[[formal_model]]
+id = "lifecycle-doc-close-v2-live-stmt-zombie-cleanup"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/lifecycle_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteLifecycleApi"
+init = "initDoc"
+step = "step"
+invariants = ["lifecycleCloseV2LiveStmtPath"]
+requirement_ids = ["SQLITE-CAPI-CLOSE-V2-LIVE-STMT"]
+scenario_ids = []
+divergence_cases = []
+
+[[formal_model]]
+id = "lifecycle-doc-prepare-v2-v3-zero-flags-equivalent"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/lifecycle_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteLifecycleApi"
+init = "initDoc"
+step = "step"
+invariants = ["lifecyclePrepareV2V3ZeroFlagsEquivalent"]
+requirement_ids = ["R-37923-12173"]
+scenario_ids = []
+divergence_cases = []
+
+[[formal_model]]
+id = "lifecycle-doc-close-live-backup-busy-then-close"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/lifecycle_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteLifecycleApi"
+init = "initDoc"
+step = "step"
+invariants = ["lifecycleCloseLiveBackupPath"]
+requirement_ids = ["SQLITE-CAPI-CLOSE-LIVE-BACKUP"]
+scenario_ids = []
+divergence_cases = []
+
+[[formal_model]]
+id = "lifecycle-doc-close-v2-live-backup-zombie-cleanup"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/lifecycle_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteLifecycleApi"
+init = "initDoc"
+step = "step"
+invariants = ["lifecycleCloseV2LiveBackupPath"]
+requirement_ids = ["SQLITE-CAPI-CLOSE-V2-LIVE-BACKUP"]
+scenario_ids = []
+divergence_cases = []
+
+[[formal_model]]
+id = "lifecycle-doc-backup-step-done-finish-ok"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/lifecycle_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteLifecycleApi"
+init = "initDoc"
+step = "step"
+invariants = ["lifecycleBackupStepDoneFinishPath"]
+requirement_ids = ["SQLITE-CAPI-BACKUP-STEP-DONE-FINISH"]
+scenario_ids = []
+divergence_cases = []
+
+[[formal_model]]
+id = "lifecycle-doc-backup-step-zero-no-progress"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/lifecycle_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteLifecycleApi"
+init = "initDoc"
+step = "step"
+invariants = ["lifecycleBackupStepZeroNoProgressPath"]
+requirement_ids = ["SQLITE-CAPI-BACKUP-STEP-DONE-FINISH"]
+scenario_ids = []
+divergence_cases = []
+
+[[formal_model]]
+id = "lifecycle-doc-backup-step-negative-all-remaining-done"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/lifecycle_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteLifecycleApi"
+init = "initDoc"
+step = "step"
+invariants = ["lifecycleBackupStepNegativeAllRemainingPath"]
+requirement_ids = ["SQLITE-CAPI-BACKUP-STEP-DONE-FINISH"]
+scenario_ids = []
+divergence_cases = []
+
+[[formal_model]]
+id = "lifecycle-doc-backup-step-transient-conflict-retry"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/lifecycle_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteLifecycleApi"
+init = "initDoc"
+step = "step"
+invariants = ["lifecycleBackupStepTransientConflictPath"]
+requirement_ids = ["SQLITE-CAPI-BACKUP-STEP-DONE-FINISH"]
+scenario_ids = []
+divergence_cases = []
+
+[[formal_model]]
+id = "lifecycle-doc-backup-finish-incomplete-ok"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/lifecycle_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteLifecycleApi"
+init = "initDoc"
+step = "step"
+invariants = ["lifecycleBackupFinishIncompletePath"]
+requirement_ids = ["SQLITE-CAPI-BACKUP-FINISH-INCOMPLETE-OK"]
+scenario_ids = []
+divergence_cases = []
+
+[[formal_model]]
+id = "lifecycle-doc-backup-init-same-connection-error"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/lifecycle_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteLifecycleApi"
+init = "initDoc"
+step = "step"
+invariants = ["lifecycleBackupInitSameConnectionErrorPath"]
+requirement_ids = ["SQLITE-CAPI-BACKUP-INIT-SAME-CONNECTION-ERROR"]
+scenario_ids = []
+divergence_cases = []
+
+[[formal_model]]
+id = "lifecycle-doc-backup-init-dest-read-txn-error"
+tool = "quint_apalache"
+kind = "invariant"
+model_path = "quint/lifecycle_api.qnt"
+runner_path = "quint/run.sh"
+module = "SqliteLifecycleApi"
+init = "initDoc"
+step = "step"
+invariants = ["lifecycleBackupInitDestReadTxnErrorPath"]
+requirement_ids = ["SQLITE-CAPI-BACKUP-INIT-DEST-READ-TXN-ERROR"]
+scenario_ids = []
+divergence_cases = []
