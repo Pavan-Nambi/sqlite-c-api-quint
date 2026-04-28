@@ -420,6 +420,8 @@ module SqliteStmtApi {
     ),
   }
 
+  action stutter = state' = state
+
   action step = any {
     bindValuesForRetain,
     firstRowWithRetainedBindings,
@@ -442,6 +444,7 @@ module SqliteStmtApi {
 
     stepBlobZeroLengthRow,
     observeBlobZeroLengthAsNull,
+    stutter,
   }
 
   val stmtBindResetRetainsPath =
