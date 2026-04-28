@@ -10,7 +10,7 @@ usage() {
 usage:
   ./quint/run.sh model <lifecycle|stmt|serde>
   ./quint/run.sh trace-repro <itf.json> [--emit-tcl] [--sanitize]
-  ./quint/run.sh trace-conformance <lifecycle|stmt> [--sanitize] [--emit-tcl]
+  ./quint/run.sh trace-conformance <lifecycle|stmt|serde> [--sanitize] [--emit-tcl]
 USAGE
 }
 
@@ -239,6 +239,8 @@ cmd_trace_conformance() {
   local family=$1
   shift
 
+  load_common
+
   local sanitize=0
   local emit_tcl=0
   while [ $# -gt 0 ]; do
@@ -271,13 +273,17 @@ cmd_trace_conformance() {
       out_log="$BUILD_DIR/quint-trace-fixtures/stmt-repro.log"
       checker="$QUINT_DIR/stmt_trace_conformance_check.py"
       ;;
+    serde)
+      fixture_dir="$BUILD_DIR/quint-trace-fixtures/serde"
+      out_log="$BUILD_DIR/quint-trace-fixtures/serde-repro.log"
+      checker="$QUINT_DIR/c_quint_conformance_check.py"
+      ;;
     *)
       usage >&2
       exit 2
       ;;
   esac
 
-  load_common
   require_rg
   require_sqlite_source
 

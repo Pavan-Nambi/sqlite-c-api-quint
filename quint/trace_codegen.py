@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate replay artifacts from Apalache ITF traces.
+"""Generate validated canonical replay artifacts from Apalache ITF traces.
 
 Supported model families:
 - serde_api.qnt: deserialize-focused scenarios (existing path)
@@ -7,8 +7,8 @@ Supported model families:
 - stmt_api.qnt: bind/reset/clear + column/data_count statement scenarios
 
 Primary path in this repo:
-- ITF trace -> standalone C repro harness that executes the inferred lifecycle
-  on upstream SQLite and emits `case`/`diverge` lines.
+- Supported ITF trace shape -> standalone C repro harness for that canonical
+  scenario on upstream SQLite. This is not arbitrary semantic trace replay.
 
 Secondary path:
 - ITF trace -> SQLite testfixture Tcl script scaffold.
@@ -34,6 +34,48 @@ SERDE_SCENARIOS = {
         "event_name": "deserialize_backup_source_trace_mismatch",
         "setup": "backup_source",
         "tcl_axis": "active backup source",
+    },
+    "deserialize_null_schema_main": {
+        "case_name": "deserialize-null-schema-main",
+        "event_name": "deserialize_null_schema_main_trace_mismatch",
+        "setup": "none",
+        "tcl_axis": "NULL schema aliases main",
+    },
+    "deserialize_attached_schema": {
+        "case_name": "deserialize-attached-schema",
+        "event_name": "deserialize_attached_schema_trace_mismatch",
+        "setup": "none",
+        "tcl_axis": "attached schema deserialize success",
+    },
+    "deserialize_temp_schema_error": {
+        "case_name": "deserialize-temp-schema-error",
+        "event_name": "deserialize_temp_schema_trace_mismatch",
+        "setup": "none",
+        "tcl_axis": "temp schema rejected",
+    },
+    "deserialize_missing_schema_error": {
+        "case_name": "deserialize-missing-schema-error",
+        "event_name": "deserialize_missing_schema_trace_mismatch",
+        "setup": "none",
+        "tcl_axis": "missing schema rejected",
+    },
+    "deserialize_readonly_read_write": {
+        "case_name": "deserialize-readonly-read-write",
+        "event_name": "deserialize_readonly_trace_mismatch",
+        "setup": "none",
+        "tcl_axis": "readonly deserialize permits reads and rejects writes",
+    },
+    "deserialize_resizeable_growth": {
+        "case_name": "deserialize-resizeable-growth",
+        "event_name": "deserialize_resizeable_growth_trace_mismatch",
+        "setup": "none",
+        "tcl_axis": "resizeable deserialize can grow",
+    },
+    "deserialize_nonresizeable_growth": {
+        "case_name": "deserialize-nonresizeable-growth",
+        "event_name": "deserialize_nonresizeable_growth_trace_mismatch",
+        "setup": "none",
+        "tcl_axis": "nonresizeable deserialize is bounded by supplied buffer",
     },
 }
 
@@ -169,6 +211,364 @@ VALID_RC = {
 }
 
 
+LIFECYCLE_TERMINAL_FACTS: dict[str, dict[str, object]] = {
+    "finalize_null": {
+        "stage": 1,
+        "connOpen": False,
+        "connZombie": False,
+        "stmtHandleLive": False,
+        "backupHandleLive": False,
+    },
+    "close_null": {
+        "stage": 0,
+        "connOpen": False,
+        "connZombie": False,
+        "stmtHandleLive": False,
+        "backupHandleLive": False,
+        "closeNullCalled": True,
+        "closeV2NullCalled": True,
+    },
+    "close_live_stmt": {
+        "stage": 5,
+        "connOpen": False,
+        "connZombie": False,
+        "stmtHandleLive": False,
+    },
+    "close_v2_live_stmt": {
+        "stage": 4,
+        "connOpen": False,
+        "connZombie": False,
+        "stmtHandleLive": False,
+    },
+    "prepare_v2_v3_zero_flags": {
+        "stage": 3,
+        "connOpen": False,
+        "prepareCaseSelected": True,
+        "prepareComparedEqual": True,
+    },
+    "close_live_backup": {
+        "stage": 5,
+        "connOpen": False,
+        "connZombie": False,
+        "backupHandleLive": False,
+    },
+    "close_v2_live_backup": {
+        "stage": 3,
+        "connOpen": False,
+        "connZombie": False,
+        "backupHandleLive": False,
+    },
+    "backup_step_done_finish": {
+        "stage": 4,
+        "connOpen": True,
+        "backupHandleLive": False,
+        "backupQueryMatched": True,
+    },
+    "backup_finish_incomplete": {
+        "stage": 3,
+        "connOpen": True,
+        "backupHandleLive": False,
+        "backupQueryMatched": False,
+    },
+    "backup_step_zero_no_progress": {
+        "stage": 5,
+        "connOpen": False,
+        "backupHandleLive": False,
+        "backupQueryMatched": True,
+    },
+    "backup_step_negative_all_remaining_done": {
+        "stage": 4,
+        "connOpen": False,
+        "backupHandleLive": False,
+        "backupQueryMatched": True,
+    },
+    "backup_step_transient_conflict_retry": {
+        "stage": 5,
+        "connOpen": False,
+        "backupHandleLive": False,
+        "backupQueryMatched": True,
+    },
+    "backup_init_same_connection_error": {
+        "stage": 1,
+        "connOpen": True,
+        "connZombie": False,
+        "backupHandleLive": False,
+    },
+    "backup_init_dest_read_txn_error": {
+        "stage": 2,
+        "connOpen": True,
+        "destReadTxnStarted": True,
+        "backupHandleLive": False,
+    },
+}
+
+
+STMT_TERMINAL_FACTS: dict[str, dict[str, object]] = {
+    "bind_reset_retains": {
+        "stage": 4,
+        "bindingsSet": True,
+        "resetCalled": True,
+        "firstStepRow": True,
+        "secondStepRow": True,
+    },
+    "clear_bindings_null": {
+        "stage": 5,
+        "bindingsSet": False,
+        "resetCalled": True,
+        "clearCalled": True,
+        "firstStepRow": True,
+        "secondStepRow": True,
+    },
+    "bind_after_step_misuse": {
+        "stage": 2,
+        "firstStepRow": True,
+        "misuseObserved": True,
+    },
+    "data_count_row_done": {
+        "stage": 4,
+        "firstStepRow": True,
+        "secondStepRow": True,
+        "dataCountBeforeZero": True,
+        "dataCountRowNonZero": True,
+        "dataCountDoneZero": True,
+    },
+    "column_blob_zero_length_null": {
+        "stage": 2,
+        "firstStepRow": True,
+        "blobZeroIsNull": True,
+    },
+}
+
+
+LIFECYCLE_EXPECTED_STEPS: dict[str, list[str]] = {
+    "finalize_null": [
+        "stage_0_to_1",
+    ],
+    "close_null": [
+        "close_null_called",
+        "close_v2_null_called",
+    ],
+    "close_live_stmt": [
+        "stage_0_to_1",
+        "stmt_live",
+        "stage_1_to_2",
+        "stage_2_to_3",
+        "stage_3_to_4",
+        "stage_4_to_5",
+    ],
+    "close_v2_live_stmt": [
+        "stage_0_to_1",
+        "stmt_live",
+        "stage_1_to_2",
+        "stage_2_to_3",
+        "stage_3_to_4",
+    ],
+    "prepare_v2_v3_zero_flags": [
+        "stage_0_to_1",
+        "prepare_case_selected",
+        "stage_1_to_2",
+        "prepare_compared_equal",
+        "stage_2_to_3",
+    ],
+    "close_live_backup": [
+        "stage_0_to_1",
+        "backup_live",
+        "stage_1_to_2",
+        "stage_2_to_3",
+        "stage_3_to_4",
+        "stage_4_to_5",
+    ],
+    "close_v2_live_backup": [
+        "stage_0_to_1",
+        "backup_live",
+        "stage_1_to_2",
+        "stage_2_to_3",
+    ],
+    "backup_step_done_finish": [
+        "stage_0_to_1",
+        "backup_live",
+        "stage_1_to_2",
+        "stage_2_to_3",
+        "stage_3_to_4",
+        "backup_query_matched",
+    ],
+    "backup_finish_incomplete": [
+        "stage_0_to_1",
+        "backup_live",
+        "stage_1_to_2",
+        "stage_2_to_3",
+    ],
+    "backup_step_zero_no_progress": [
+        "stage_0_to_1",
+        "backup_live",
+        "stage_1_to_2",
+        "stage_2_to_3",
+        "stage_3_to_4",
+        "backup_query_matched",
+        "stage_4_to_5",
+    ],
+    "backup_step_negative_all_remaining_done": [
+        "stage_0_to_1",
+        "backup_live",
+        "stage_1_to_2",
+        "stage_2_to_3",
+        "backup_query_matched",
+        "stage_3_to_4",
+    ],
+    "backup_step_transient_conflict_retry": [
+        "stage_0_to_1",
+        "backup_live",
+        "stage_1_to_2",
+        "backup_query_matched",
+        "stage_2_to_3",
+        "stage_3_to_4",
+        "stage_4_to_5",
+    ],
+    "backup_init_same_connection_error": [
+        "stage_0_to_1",
+    ],
+    "backup_init_dest_read_txn_error": [
+        "stage_0_to_1",
+        "dest_read_txn_started",
+        "stage_1_to_2",
+    ],
+}
+
+
+STMT_EXPECTED_STEPS: dict[str, list[str]] = {
+    "bind_reset_retains": [
+        "stage_0_to_1",
+        "bindings_set",
+        "stage_1_to_2",
+        "first_step_row",
+        "stage_2_to_3",
+        "reset_called",
+        "stage_3_to_4",
+        "second_step_row",
+    ],
+    "clear_bindings_null": [
+        "stage_0_to_1",
+        "bindings_set",
+        "stage_1_to_2",
+        "first_step_row",
+        "stage_2_to_3",
+        "reset_called",
+        "stage_3_to_4",
+        "clear_called",
+        "stage_4_to_5",
+        "second_step_row",
+    ],
+    "bind_after_step_misuse": [
+        "stage_0_to_1",
+        "first_step_row",
+        "stage_1_to_2",
+        "misuse_observed",
+    ],
+    "data_count_row_done": [
+        "stage_0_to_1",
+        "data_count_before_zero",
+        "stage_1_to_2",
+        "first_step_row",
+        "data_count_row_nonzero",
+        "stage_2_to_3",
+        "second_step_row",
+        "stage_3_to_4",
+        "data_count_done_zero",
+    ],
+    "column_blob_zero_length_null": [
+        "stage_0_to_1",
+        "first_step_row",
+        "stage_1_to_2",
+        "blob_zero_is_null",
+    ],
+}
+
+
+SERDE_EXPECTED_STEPS: dict[str, list[str]] = {
+    "deserialize_read_txn_busy": [
+        "start_read_txn",
+        "deserialize",
+    ],
+    "deserialize_backup_busy": [
+        "start_backup_source",
+        "deserialize",
+    ],
+    "deserialize_null_schema_main": [
+        "deserialize",
+    ],
+    "deserialize_attached_schema": [
+        "deserialize",
+    ],
+    "deserialize_temp_schema_error": [
+        "deserialize",
+    ],
+    "deserialize_missing_schema_error": [
+        "deserialize",
+    ],
+    "deserialize_readonly_read_write": [
+        "deserialize",
+        "readonly_read",
+        "readonly_write_reject",
+    ],
+    "deserialize_resizeable_growth": [
+        "deserialize",
+        "resizeable_grow",
+    ],
+    "deserialize_nonresizeable_growth": [
+        "deserialize",
+        "grow_within_limit",
+        "reject_beyond_limit",
+    ],
+}
+
+
+SERDE_TERMINAL_FACTS: dict[str, dict[str, object]] = {
+    "deserialize_read_txn_busy": {
+        "readTxn": True,
+        "deserialized": False,
+        "rc": "SQLITE_BUSY",
+    },
+    "deserialize_backup_busy": {
+        "backupSource": True,
+        "deserialized": False,
+        "rc": "SQLITE_BUSY",
+    },
+    "deserialize_null_schema_main": {
+        "deserialized": True,
+        "rc": "SQLITE_OK",
+    },
+    "deserialize_attached_schema": {
+        "deserialized": True,
+        "rc": "SQLITE_OK",
+    },
+    "deserialize_temp_schema_error": {
+        "deserialized": False,
+        "rc": "SQLITE_ERROR",
+    },
+    "deserialize_missing_schema_error": {
+        "deserialized": False,
+        "rc": "SQLITE_ERROR",
+    },
+    "deserialize_readonly_read_write": {
+        "deserialized": True,
+        "readonlyRead": True,
+        "readonlyWriteRejected": True,
+        "rc": "SQLITE_READONLY",
+    },
+    "deserialize_resizeable_growth": {
+        "deserialized": True,
+        "resizeableGrew": True,
+        "rc": "SQLITE_OK",
+    },
+    "deserialize_nonresizeable_growth": {
+        "deserialized": True,
+        "grewWithinLimit": True,
+        "rejectedBeyondLimit": True,
+        "rc": "SQLITE_FULL",
+    },
+}
+
+
 def all_supported_scenarios() -> list[str]:
     return sorted(set(SERDE_SCENARIOS) | set(LIFECYCLE_SCENARIOS) | set(STMT_SCENARIOS))
 
@@ -244,6 +644,67 @@ def _stage_value(state: dict[str, object]) -> int:
     return stage
 
 
+def validate_staged_trace(
+    scenario: str,
+    states: list[dict[str, object]],
+    expected_terminal_stage: int,
+    terminal_facts: dict[str, object],
+) -> None:
+    stages = [_stage_value(state) for state in states]
+    if stages[0] != 0:
+        raise ValueError(f"{scenario}: trace must start at stage 0, got {stages[0]}")
+
+    for idx, (prev_stage, curr_stage) in enumerate(zip(stages, stages[1:]), 1):
+        if curr_stage < prev_stage:
+            raise ValueError(
+                f"{scenario}: stage regressed at transition {idx}: "
+                f"{prev_stage} -> {curr_stage}"
+            )
+        if curr_stage - prev_stage > 1:
+            raise ValueError(
+                f"{scenario}: stage skipped at transition {idx}: "
+                f"{prev_stage} -> {curr_stage}"
+            )
+
+    observed_terminal_stage = max(stages)
+    if observed_terminal_stage != expected_terminal_stage:
+        raise ValueError(
+            f"{scenario}: expected terminal stage {expected_terminal_stage}, "
+            f"observed {observed_terminal_stage}"
+        )
+    if stages[-1] != expected_terminal_stage:
+        raise ValueError(
+            f"{scenario}: final trace state is stage {stages[-1]}, "
+            f"expected terminal stage {expected_terminal_stage}"
+        )
+
+    validate_terminal_facts(scenario, states[-1], terminal_facts)
+
+
+def validate_expected_steps(
+    scenario: str,
+    observed_steps: list[str],
+    expected_steps: list[str],
+) -> None:
+    if observed_steps != expected_steps:
+        raise ValueError(
+            f"{scenario}: expected steps {expected_steps!r}, got {observed_steps!r}"
+        )
+
+
+def validate_terminal_facts(
+    scenario: str,
+    state: dict[str, object],
+    terminal_facts: dict[str, object],
+) -> None:
+    for key, expected in terminal_facts.items():
+        observed = state.get(key)
+        if observed != expected:
+            raise ValueError(
+                f"{scenario}: terminal {key} expected {expected!r}, got {observed!r}"
+            )
+
+
 def infer_lifecycle_transition_steps(states: list[dict[str, object]]) -> list[str]:
     steps: list[str] = []
     for prev, curr in zip(states, states[1:]):
@@ -264,6 +725,8 @@ def infer_lifecycle_transition_steps(states: list[dict[str, object]]) -> list[st
             steps.append("stmt_live")
         if bool(curr.get("backupHandleLive")) and not bool(prev.get("backupHandleLive")):
             steps.append("backup_live")
+        if bool(curr.get("backupQueryMatched")) and not bool(prev.get("backupQueryMatched")):
+            steps.append("backup_query_matched")
         if bool(curr.get("destReadTxnStarted")) and not bool(prev.get("destReadTxnStarted")):
             steps.append("dest_read_txn_started")
     return steps
@@ -310,6 +773,8 @@ def infer_serde_model(scenario: str, states: list[dict[str, object]]) -> dict[st
 
     info = SERDE_SCENARIOS[scenario]
     inferred_steps = infer_serde_transition_steps(states)
+    validate_expected_steps(scenario, inferred_steps, SERDE_EXPECTED_STEPS[scenario])
+    validate_terminal_facts(scenario, states[-1], SERDE_TERMINAL_FACTS[scenario])
 
     return {
         "family": "serde",
@@ -325,7 +790,14 @@ def infer_serde_model(scenario: str, states: list[dict[str, object]]) -> dict[st
 
 def infer_lifecycle_model(scenario: str, states: list[dict[str, object]]) -> dict[str, object]:
     info = LIFECYCLE_SCENARIOS[scenario]
+    validate_staged_trace(
+        scenario,
+        states,
+        int(info["expected_terminal_stage"]),
+        LIFECYCLE_TERMINAL_FACTS[scenario],
+    )
     inferred_steps = infer_lifecycle_transition_steps(states)
+    validate_expected_steps(scenario, inferred_steps, LIFECYCLE_EXPECTED_STEPS[scenario])
     terminal_stage = max(_stage_value(state) for state in states)
 
     return {
@@ -342,7 +814,14 @@ def infer_lifecycle_model(scenario: str, states: list[dict[str, object]]) -> dic
 
 def infer_stmt_model(scenario: str, states: list[dict[str, object]]) -> dict[str, object]:
     info = STMT_SCENARIOS[scenario]
+    validate_staged_trace(
+        scenario,
+        states,
+        int(info["expected_terminal_stage"]),
+        STMT_TERMINAL_FACTS[scenario],
+    )
     inferred_steps = infer_stmt_transition_steps(states)
+    validate_expected_steps(scenario, inferred_steps, STMT_EXPECTED_STEPS[scenario])
     terminal_stage = max(_stage_value(state) for state in states)
 
     return {
@@ -384,54 +863,7 @@ def emit_manifest(model: dict[str, object], out_path: Path) -> None:
     out_path.write_text(json.dumps(model, indent=2, sort_keys=True) + "\n")
 
 
-def c_setup_block(setup: str) -> str:
-    if setup == "read_txn":
-        return textwrap.dedent(
-            """\
-            if (exec_ok(target, "BEGIN") != 0) return 1;
-            if (query_count(target, &count) != 0) return 1;
-            if (count != 3) return fail_msg(case_name, "read transaction query mismatch");
-            if (sqlite3_txn_state(target, "main") != SQLITE_TXN_READ) {
-              return fail_msg(case_name, "target is not in SQLITE_TXN_READ state");
-            }
-            """
-        )
-    if setup == "backup_source":
-        return textwrap.dedent(
-            """\
-            if (open_memory(&backup_dst) != 0) return 1;
-            backup = sqlite3_backup_init(backup_dst, "main", target, "main");
-            if (backup == 0) return fail_msg(case_name, "sqlite3_backup_init returned NULL");
-            """
-        )
-    raise ValueError(f"unsupported setup kind: {setup}")
-
-
-def c_cleanup_block(setup: str) -> str:
-    if setup == "read_txn":
-        return textwrap.dedent(
-            """\
-            if (sqlite3_close(target) != SQLITE_OK) return fail_msg(case_name, "close target failed");
-            if (sqlite3_close(src) != SQLITE_OK) return fail_msg(case_name, "close src failed");
-            return 0;
-            """
-        )
-    if setup == "backup_source":
-        return textwrap.dedent(
-            """\
-            rc = sqlite3_backup_finish(backup);
-            if (rc != SQLITE_OK) return fail_rc("backup finish", SQLITE_OK, rc);
-            if (sqlite3_close(backup_dst) != SQLITE_OK) return fail_msg(case_name, "close backup dst failed");
-            if (sqlite3_close(target) != SQLITE_OK) return fail_msg(case_name, "close target failed");
-            if (sqlite3_close(src) != SQLITE_OK) return fail_msg(case_name, "close src failed");
-            return 0;
-            """
-        )
-    raise ValueError(f"unsupported setup kind: {setup}")
-
-
 def emit_c_serde(model: dict[str, object], out_path: Path) -> None:
-    setup = str(model["setup"])
     expected_rc = str(model["expected_rc"])
     case_name = str(model["case_name"])
     event_name = str(model["event_name"])
@@ -441,6 +873,7 @@ def emit_c_serde(model: dict[str, object], out_path: Path) -> None:
 #include "sqlite3.h"
 
 #include <stdio.h>
+#include <string.h>
 
 /* Generated from Quint ITF trace.
  * family: {model['family']}
@@ -481,6 +914,41 @@ static int fail_rc(const char *name, int expected, int got) {{
   return 1;
 }}
 
+static int query_count_sql(sqlite3 *db, const char *sql, int *count);
+
+static int check_rc(
+    const char *case_name,
+    const char *event_name,
+    const char *api_name,
+    int expected,
+    int observed) {{
+  if (observed == expected) return 0;
+  printf("diverge %s %s api=%s expected=%s observed=%s\\n",
+      case_name,
+      event_name,
+      api_name,
+      rc_name(expected),
+      rc_name(observed));
+  return 1;
+}}
+
+static int check_count(
+    const char *case_name,
+    const char *event_name,
+    sqlite3 *db,
+    const char *sql,
+    int expected) {{
+  int count = 0;
+  if (query_count_sql(db, sql, &count) != 0) return 1;
+  if (count == expected) return 0;
+  printf("diverge %s %s api=sqlite3_step expected=count_%d observed=count_%d\\n",
+      case_name,
+      event_name,
+      expected,
+      count);
+  return 1;
+}}
+
 static int open_memory(sqlite3 **db) {{
   int rc = sqlite3_open(":memory:", db);
   if (rc != SQLITE_OK) {{
@@ -502,6 +970,13 @@ static int exec_ok(sqlite3 *db, const char *sql) {{
   return 0;
 }}
 
+static int exec_rc(sqlite3 *db, const char *sql) {{
+  char *errmsg = 0;
+  int rc = sqlite3_exec(db, sql, 0, 0, &errmsg);
+  sqlite3_free(errmsg);
+  return rc;
+}}
+
 static int make_small_source(sqlite3 **db) {{
   if (open_memory(db) != 0) return 1;
   return exec_ok(*db,
@@ -509,9 +984,20 @@ static int make_small_source(sqlite3 **db) {{
       "INSERT INTO t1 VALUES(1),(2),(3);");
 }}
 
+static int make_blob_source(sqlite3 **db) {{
+  if (open_memory(db) != 0) return 1;
+  return exec_ok(*db,
+      "CREATE TABLE t1(x BLOB);"
+      "INSERT INTO t1 VALUES(zeroblob(16));");
+}}
+
 static int query_count(sqlite3 *db, int *count) {{
+  return query_count_sql(db, "SELECT count(*) FROM t1", count);
+}}
+
+static int query_count_sql(sqlite3 *db, const char *sql, int *count) {{
   sqlite3_stmt *stmt = 0;
-  int rc = sqlite3_prepare_v2(db, "SELECT count(*) FROM t1", -1, &stmt, 0);
+  int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, 0);
   if (rc != SQLITE_OK) return 1;
   rc = sqlite3_step(stmt);
   if (rc != SQLITE_ROW) {{
@@ -535,12 +1021,32 @@ static int serialize_copy(sqlite3 *db, unsigned char **data, sqlite3_int64 *size
   return 0;
 }}
 
-int main(void) {{
-  const char *case_name = "{case_name}";
+static int serialize_with_capacity(
+    sqlite3 *db,
+    unsigned char **data,
+    sqlite3_int64 *size,
+    sqlite3_int64 capacity) {{
+  unsigned char *source = 0;
+  sqlite3_int64 source_size = 0;
+  if (serialize_copy(db, &source, &source_size) != 0) return 1;
+  if (capacity < source_size) {{
+    sqlite3_free(source);
+    return fail_msg("serialize_with_capacity", "capacity smaller than source image");
+  }}
+  *data = sqlite3_malloc64((sqlite3_uint64)capacity);
+  if (*data == 0) {{
+    sqlite3_free(source);
+    return fail_msg("serialize_with_capacity", "sqlite3_malloc64 returned NULL");
+  }}
+  memcpy(*data, source, (size_t)source_size);
+  sqlite3_free(source);
+  *size = source_size;
+  return 0;
+}}
+
+static int run_deserialize_read_txn_busy(const char *case_name, const char *event_name) {{
   sqlite3 *src = 0;
   sqlite3 *target = 0;
-  sqlite3 *backup_dst = 0;
-  sqlite3_backup *backup = 0;
   unsigned char *data = 0;
   sqlite3_int64 size = 0;
   int count = 0;
@@ -551,15 +1057,250 @@ int main(void) {{
   if (make_small_source(&target) != 0) return 1;
   if (serialize_copy(src, &data, &size) != 0) return 1;
 
-{textwrap.indent(c_setup_block(setup).rstrip(), '  ')}
+  if (exec_ok(target, "BEGIN") != 0) return 1;
+  if (query_count(target, &count) != 0) return 1;
+  if (count != 3) return fail_msg(case_name, "read transaction query mismatch");
+  if (sqlite3_txn_state(target, "main") != SQLITE_TXN_READ) {{
+    return fail_msg(case_name, "target is not in SQLITE_TXN_READ state");
+  }}
 
   rc = sqlite3_deserialize(target, "main", data, size, size,
       SQLITE_DESERIALIZE_FREEONCLOSE);
-  if (rc != {expected_rc}) {{
+  if (rc != SQLITE_BUSY) {{
     emit_diverge(case_name, rc);
   }}
 
-{textwrap.indent(c_cleanup_block(setup).rstrip(), '  ')}
+  if (sqlite3_close(target) != SQLITE_OK) return fail_msg(case_name, "close target failed");
+  if (sqlite3_close(src) != SQLITE_OK) return fail_msg(case_name, "close src failed");
+  return 0;
+}}
+
+static int run_deserialize_backup_busy(const char *case_name, const char *event_name) {{
+  sqlite3 *src = 0;
+  sqlite3 *target = 0;
+  sqlite3 *backup_dst = 0;
+  sqlite3_backup *backup = 0;
+  unsigned char *data = 0;
+  sqlite3_int64 size = 0;
+  int rc;
+
+  emit_case(case_name);
+  if (make_small_source(&src) != 0) return 1;
+  if (make_small_source(&target) != 0) return 1;
+  if (serialize_copy(src, &data, &size) != 0) return 1;
+
+  if (open_memory(&backup_dst) != 0) return 1;
+  backup = sqlite3_backup_init(backup_dst, "main", target, "main");
+  if (backup == 0) return fail_msg(case_name, "sqlite3_backup_init returned NULL");
+
+  rc = sqlite3_deserialize(target, "main", data, size, size,
+      SQLITE_DESERIALIZE_FREEONCLOSE);
+  if (rc != SQLITE_BUSY) {{
+    emit_diverge(case_name, rc);
+  }}
+
+  rc = sqlite3_backup_finish(backup);
+  if (rc != SQLITE_OK) return fail_rc("backup finish", SQLITE_OK, rc);
+  if (sqlite3_close(backup_dst) != SQLITE_OK) return fail_msg(case_name, "close backup dst failed");
+  if (sqlite3_close(target) != SQLITE_OK) return fail_msg(case_name, "close target failed");
+  if (sqlite3_close(src) != SQLITE_OK) return fail_msg(case_name, "close src failed");
+  return 0;
+}}
+
+static int run_deserialize_null_schema_main(const char *case_name, const char *event_name) {{
+  sqlite3 *src = 0;
+  sqlite3 *target = 0;
+  unsigned char *data = 0;
+  sqlite3_int64 size = 0;
+  int rc;
+
+  emit_case(case_name);
+  if (make_small_source(&src) != 0 || open_memory(&target) != 0) return 1;
+  if (serialize_copy(src, &data, &size) != 0) return 1;
+
+  rc = sqlite3_deserialize(target, 0, data, size, size, SQLITE_DESERIALIZE_FREEONCLOSE);
+  if (check_rc(case_name, event_name, "sqlite3_deserialize", SQLITE_OK, rc) != 0) return 1;
+  if (check_count(case_name, event_name, target, "SELECT count(*) FROM t1", 3) != 0) return 1;
+
+  if (sqlite3_close(target) != SQLITE_OK) return fail_msg(case_name, "close target failed");
+  if (sqlite3_close(src) != SQLITE_OK) return fail_msg(case_name, "close src failed");
+  return 0;
+}}
+
+static int run_deserialize_attached_schema(const char *case_name, const char *event_name) {{
+  sqlite3 *src = 0;
+  sqlite3 *target = 0;
+  unsigned char *data = 0;
+  sqlite3_int64 size = 0;
+  int rc;
+
+  emit_case(case_name);
+  if (make_small_source(&src) != 0 || open_memory(&target) != 0) return 1;
+  if (exec_ok(target, "ATTACH ':memory:' AS aux") != 0) return 1;
+  if (serialize_copy(src, &data, &size) != 0) return 1;
+
+  rc = sqlite3_deserialize(target, "aux", data, size, size, SQLITE_DESERIALIZE_FREEONCLOSE);
+  if (check_rc(case_name, event_name, "sqlite3_deserialize", SQLITE_OK, rc) != 0) return 1;
+  if (check_count(case_name, event_name, target, "SELECT count(*) FROM aux.t1", 3) != 0) return 1;
+
+  if (sqlite3_close(target) != SQLITE_OK) return fail_msg(case_name, "close target failed");
+  if (sqlite3_close(src) != SQLITE_OK) return fail_msg(case_name, "close src failed");
+  return 0;
+}}
+
+static int run_deserialize_temp_schema_error(const char *case_name, const char *event_name) {{
+  sqlite3 *src = 0;
+  sqlite3 *target = 0;
+  unsigned char *data = 0;
+  sqlite3_int64 size = 0;
+  int rc;
+
+  emit_case(case_name);
+  if (make_small_source(&src) != 0 || open_memory(&target) != 0) return 1;
+  if (serialize_copy(src, &data, &size) != 0) return 1;
+
+  rc = sqlite3_deserialize(target, "temp", data, size, size, SQLITE_DESERIALIZE_FREEONCLOSE);
+  if (check_rc(case_name, event_name, "sqlite3_deserialize", SQLITE_ERROR, rc) != 0) return 1;
+
+  if (sqlite3_close(target) != SQLITE_OK) return fail_msg(case_name, "close target failed");
+  if (sqlite3_close(src) != SQLITE_OK) return fail_msg(case_name, "close src failed");
+  return 0;
+}}
+
+static int run_deserialize_missing_schema_error(const char *case_name, const char *event_name) {{
+  sqlite3 *src = 0;
+  sqlite3 *target = 0;
+  unsigned char *data = 0;
+  sqlite3_int64 size = 0;
+  int rc;
+
+  emit_case(case_name);
+  if (make_small_source(&src) != 0 || open_memory(&target) != 0) return 1;
+  if (serialize_copy(src, &data, &size) != 0) return 1;
+
+  rc = sqlite3_deserialize(target, "missing", data, size, size, SQLITE_DESERIALIZE_FREEONCLOSE);
+  if (check_rc(case_name, event_name, "sqlite3_deserialize", SQLITE_ERROR, rc) != 0) return 1;
+
+  if (sqlite3_close(target) != SQLITE_OK) return fail_msg(case_name, "close target failed");
+  if (sqlite3_close(src) != SQLITE_OK) return fail_msg(case_name, "close src failed");
+  return 0;
+}}
+
+static int run_deserialize_readonly_read_write(const char *case_name, const char *event_name) {{
+  sqlite3 *src = 0;
+  sqlite3 *target = 0;
+  unsigned char *data = 0;
+  sqlite3_int64 size = 0;
+  int rc;
+
+  emit_case(case_name);
+  if (make_small_source(&src) != 0 || open_memory(&target) != 0) return 1;
+  if (serialize_copy(src, &data, &size) != 0) return 1;
+
+  rc = sqlite3_deserialize(target, "main", data, size, size,
+      SQLITE_DESERIALIZE_FREEONCLOSE | SQLITE_DESERIALIZE_READONLY);
+  if (check_rc(case_name, event_name, "sqlite3_deserialize", SQLITE_OK, rc) != 0) return 1;
+  if (check_count(case_name, event_name, target, "SELECT count(*) FROM t1", 3) != 0) return 1;
+
+  rc = exec_rc(target, "INSERT INTO t1 VALUES(4)");
+  if (check_rc(case_name, event_name, "sqlite3_exec", SQLITE_READONLY, rc) != 0) return 1;
+
+  if (sqlite3_close(target) != SQLITE_OK) return fail_msg(case_name, "close target failed");
+  if (sqlite3_close(src) != SQLITE_OK) return fail_msg(case_name, "close src failed");
+  return 0;
+}}
+
+static int run_deserialize_resizeable_growth(const char *case_name, const char *event_name) {{
+  sqlite3 *src = 0;
+  sqlite3 *target = 0;
+  unsigned char *data = 0;
+  sqlite3_int64 size = 0;
+  sqlite3_int64 capacity = 0;
+  int rc;
+
+  emit_case(case_name);
+  if (make_blob_source(&src) != 0 || open_memory(&target) != 0) return 1;
+  if (serialize_copy(src, &data, &size) != 0) return 1;
+  sqlite3_free(data);
+  capacity = size + 1024 * 1024;
+  if (serialize_with_capacity(src, &data, &size, capacity) != 0) return 1;
+
+  rc = sqlite3_deserialize(target, "main", data, size, capacity,
+      SQLITE_DESERIALIZE_FREEONCLOSE | SQLITE_DESERIALIZE_RESIZEABLE);
+  if (check_rc(case_name, event_name, "sqlite3_deserialize", SQLITE_OK, rc) != 0) return 1;
+
+  rc = exec_rc(target, "INSERT INTO t1 VALUES(zeroblob(200000))");
+  if (check_rc(case_name, event_name, "sqlite3_exec", SQLITE_OK, rc) != 0) return 1;
+
+  if (sqlite3_close(target) != SQLITE_OK) return fail_msg(case_name, "close target failed");
+  if (sqlite3_close(src) != SQLITE_OK) return fail_msg(case_name, "close src failed");
+  return 0;
+}}
+
+static int run_deserialize_nonresizeable_growth(const char *case_name, const char *event_name) {{
+  sqlite3 *src = 0;
+  sqlite3 *target = 0;
+  unsigned char *data = 0;
+  sqlite3_int64 size = 0;
+  sqlite3_int64 capacity = 0;
+  int rc;
+
+  emit_case(case_name);
+  if (make_blob_source(&src) != 0 || open_memory(&target) != 0) return 1;
+  capacity = 1024 * 1024;
+  if (serialize_with_capacity(src, &data, &size, capacity) != 0) return 1;
+
+  rc = sqlite3_deserialize(target, "main", data, size, capacity, SQLITE_DESERIALIZE_FREEONCLOSE);
+  if (check_rc(case_name, event_name, "sqlite3_deserialize", SQLITE_OK, rc) != 0) return 1;
+
+  rc = exec_rc(target, "INSERT INTO t1 VALUES(zeroblob(100))");
+  if (check_rc(case_name, event_name, "sqlite3_exec", SQLITE_OK, rc) != 0) return 1;
+
+  rc = exec_rc(target, "INSERT INTO t1 VALUES(zeroblob(2000000))");
+  if (check_rc(case_name, event_name, "sqlite3_exec", SQLITE_FULL, rc) != 0) return 1;
+
+  if (sqlite3_close(target) != SQLITE_OK) return fail_msg(case_name, "close target failed");
+  if (sqlite3_close(src) != SQLITE_OK) return fail_msg(case_name, "close src failed");
+  return 0;
+}}
+
+int main(void) {{
+  const char *scenario = "{model['scenario']}";
+  const char *case_name = "{case_name}";
+  const char *event_name = "{event_name}";
+  (void)event_name;
+  (void)"{expected_rc}";
+
+  if (strcmp(scenario, "deserialize_read_txn_busy") == 0) {{
+    return run_deserialize_read_txn_busy(case_name, event_name);
+  }}
+  if (strcmp(scenario, "deserialize_backup_busy") == 0) {{
+    return run_deserialize_backup_busy(case_name, event_name);
+  }}
+  if (strcmp(scenario, "deserialize_null_schema_main") == 0) {{
+    return run_deserialize_null_schema_main(case_name, event_name);
+  }}
+  if (strcmp(scenario, "deserialize_attached_schema") == 0) {{
+    return run_deserialize_attached_schema(case_name, event_name);
+  }}
+  if (strcmp(scenario, "deserialize_temp_schema_error") == 0) {{
+    return run_deserialize_temp_schema_error(case_name, event_name);
+  }}
+  if (strcmp(scenario, "deserialize_missing_schema_error") == 0) {{
+    return run_deserialize_missing_schema_error(case_name, event_name);
+  }}
+  if (strcmp(scenario, "deserialize_readonly_read_write") == 0) {{
+    return run_deserialize_readonly_read_write(case_name, event_name);
+  }}
+  if (strcmp(scenario, "deserialize_resizeable_growth") == 0) {{
+    return run_deserialize_resizeable_growth(case_name, event_name);
+  }}
+  if (strcmp(scenario, "deserialize_nonresizeable_growth") == 0) {{
+    return run_deserialize_nonresizeable_growth(case_name, event_name);
+  }}
+
+  fprintf(stderr, "unsupported serde scenario: %s\\n", scenario);
+  return 2;
 }}
 """
     out_path.write_text(source)

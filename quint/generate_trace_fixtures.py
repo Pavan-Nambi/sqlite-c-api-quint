@@ -11,12 +11,14 @@ from pathlib import Path
 SERDE_DEFAULT = {
     "readTxn": False,
     "backupSource": False,
+    "deserialized": False,
     "readonlyRead": False,
     "readonlyWriteRejected": False,
     "resizeableGrew": False,
     "walImageUseFailed": False,
     "grewWithinLimit": False,
     "rejectedBeyondLimit": False,
+    "freeOnCloseFreed": False,
     "rc": "NO_CALL",
     "divergence": False,
 }
@@ -61,6 +63,49 @@ SERDE_TRACES: dict[str, list[dict[str, object]]] = {
         {},
         {"backupSource": True},
         {"backupSource": True, "rc": "SQLITE_BUSY"},
+    ],
+    "deserialize_null_schema_main": [
+        {},
+        {"rc": "SQLITE_OK", "deserialized": True},
+    ],
+    "deserialize_attached_schema": [
+        {},
+        {"rc": "SQLITE_OK", "deserialized": True},
+    ],
+    "deserialize_temp_schema_error": [
+        {},
+        {"rc": "SQLITE_ERROR"},
+    ],
+    "deserialize_missing_schema_error": [
+        {},
+        {"rc": "SQLITE_ERROR"},
+    ],
+    "deserialize_readonly_read_write": [
+        {},
+        {"rc": "SQLITE_OK", "deserialized": True},
+        {"rc": "SQLITE_OK", "deserialized": True, "readonlyRead": True},
+        {
+            "rc": "SQLITE_READONLY",
+            "deserialized": True,
+            "readonlyRead": True,
+            "readonlyWriteRejected": True,
+        },
+    ],
+    "deserialize_resizeable_growth": [
+        {},
+        {"rc": "SQLITE_OK", "deserialized": True},
+        {"rc": "SQLITE_OK", "deserialized": True, "resizeableGrew": True},
+    ],
+    "deserialize_nonresizeable_growth": [
+        {},
+        {"rc": "SQLITE_OK", "deserialized": True},
+        {"rc": "SQLITE_OK", "deserialized": True, "grewWithinLimit": True},
+        {
+            "rc": "SQLITE_FULL",
+            "deserialized": True,
+            "grewWithinLimit": True,
+            "rejectedBeyondLimit": True,
+        },
     ],
 }
 
@@ -123,14 +168,14 @@ LIFECYCLE_TRACES: dict[str, list[dict[str, object]]] = {
         {"stage": 0, "connOpen": True},
         {"stage": 1, "connOpen": True, "backupHandleLive": True},
         {"stage": 2, "connOpen": True, "backupHandleLive": True},
-        {"stage": 3, "connOpen": True, "backupHandleLive": False, "backupQueryMatched": True},
-        {"stage": 4, "connOpen": False, "backupHandleLive": False, "backupQueryMatched": True},
+        {"stage": 3, "connOpen": True, "backupHandleLive": False},
+        {"stage": 4, "connOpen": True, "backupHandleLive": False, "backupQueryMatched": True},
     ],
     "backup_finish_incomplete": [
         {"stage": 0, "connOpen": True},
         {"stage": 1, "connOpen": True, "backupHandleLive": True},
         {"stage": 2, "connOpen": True, "backupHandleLive": True},
-        {"stage": 3, "connOpen": False, "backupHandleLive": False},
+        {"stage": 3, "connOpen": True, "backupHandleLive": False},
     ],
     "backup_step_zero_no_progress": [
         {"stage": 0, "connOpen": True},

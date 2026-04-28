@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when C probe traces violate documented Quint deserialize BUSY claims."""
+"""Fail when C probe traces violate documented Quint deserialize claims."""
 
 from __future__ import annotations
 
@@ -9,6 +9,13 @@ import sys
 REQUIRED_CASES = {
     "deserialize-read-transaction-busy",
     "deserialize-backup-source-busy",
+    "deserialize-null-schema-main",
+    "deserialize-attached-schema",
+    "deserialize-temp-schema-error",
+    "deserialize-missing-schema-error",
+    "deserialize-readonly-read-write",
+    "deserialize-resizeable-growth",
+    "deserialize-nonresizeable-growth",
 }
 
 
@@ -75,7 +82,7 @@ def main() -> int:
 
     print(
         "C/Quint conformance check passed: "
-        f"0 mismatches across {len(REQUIRED_CASES)} documented BUSY cases"
+        f"0 mismatches across {len(REQUIRED_CASES)} documented deserialize cases"
     )
     return 0
 

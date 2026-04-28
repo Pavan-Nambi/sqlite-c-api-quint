@@ -5,7 +5,7 @@ yes this specs might be wrong but for that plan is to run this specs first again
 
 EDIT: i severly underestimated how much time this takes it's absolutely nuts.
 
-EDIT: this found a [crash](https://sqlite.org/forum/forumpost/39134ba029) in sqlite...
+EDIT: this found a [crash](https://sqlite.org/forum/forumpost/39134ba029) in sqlite.
 
 > note: this readme could potentially contain paths and stuff that do not make sense. that's cuz this is part of full formal-methods/repo i have locally where i did some other stupid stuff.., some notes..etc
 
@@ -17,10 +17,10 @@ EDIT: this found a [crash](https://sqlite.org/forum/forumpost/39134ba029) in sql
 - `stmt_api.qnt`: bind/reset/clear + column/data_count statement state machine and invariants.
 - `serde_api.qnt`: docs-profile serialize/deserialize state machine and invariants.
 - `formal_models.toml`: mechanized-model ledger records consumed by repo checkers.
-- `c_quint_conformance_check.py`: checks serde probe divergence lines against documented BUSY cases.
+- `c_quint_conformance_check.py`: checks serde probe divergence lines against documented deserialize cases.
 - `lifecycle_trace_conformance_check.py`: checks lifecycle trace replays for unexpected divergence.
 - `stmt_trace_conformance_check.py`: checks statement trace replays for unexpected divergence.
-- `trace_codegen.py`: converts Apalache ITF traces into executable C repro harnesses (and optional Tcl scaffolds).
+- `trace_codegen.py`: validates supported ITF trace shapes and emits canonical executable C repro harnesses (and optional Tcl scaffolds).
 - `generate_trace_fixtures.py`: emits canonical ITF traces for all supported lifecycle/stmt/serde scenarios.
 - `run.sh`: single command entrypoint for model checks, ITF replay, and trace conformance lanes.
 
@@ -67,9 +67,29 @@ If this folder is embedded in the full monorepo:
 ./quint/run.sh model serde
 ```
 
+## What Is Actually Grounded
+
+The model files contain more abstract obligations than the C replay lanes
+currently ground. As of this version:
+
+- Lifecycle C replay covers all scenarios in `lifecycle_api.qnt`.
+- Statement C replay covers all scenarios in `stmt_api.qnt`.
+- Serde C replay covers: active read transaction busy, active backup source
+  busy, null schema/main success, attached schema success, temp schema error,
+  missing schema error, readonly read/write, resizeable growth, and
+  nonresizeable bounded growth.
+- Serde scenarios for WAL-image failure, API-armor negative sizes, and
+  FREEONCLOSE allocation-failure behavior remain model-only until they have
+  deterministic pinned-build probes.
+
+The generated C files are canonical repros for supported trace shapes, not a
+general-purpose semantic replay engine for arbitrary ITF traces. The generated
+lifecycle/statement Tcl files are scaffolds. The executable upstream
+conformance path for those families is the generated C harness.
+
 ## Run C/Quint Conformance Check
 
-The checker expects lines in this format on stdin:
+The serde checker expects lines in this format on stdin:
 
 - `case <case-name>`
 - `diverge <case-name> <event> <fact=value>...`
@@ -77,34 +97,17 @@ The checker expects lines in this format on stdin:
 Example when running inside `quint/` (standalone-friendly):
 
 ```sh
-printf 'case deserialize-read-transaction-busy\ncase deserialize-backup-source-busy\n' \
-  | python3 ./c_quint_conformance_check.py
+./run.sh trace-conformance serde
 ```
 
 If this folder is embedded in the full monorepo:
 
 ```sh
-printf 'case deserialize-read-transaction-busy\ncase deserialize-backup-source-busy\n' \
-  | python3 ./quint/c_quint_conformance_check.py
+./quint/run.sh trace-conformance serde
 ```
 
-In this repo, the normal wired path is:
-
-```sh
-./model/run_check.sh divergence
-```
-
-Lifecycle replay conformance path:
-
-```sh
-./model/run_check.sh quint-lifecycle-trace
-```
-
-Statement replay conformance path:
-
-```sh
-./model/run_check.sh quint-stmt-trace
-```
+External monorepo wrappers are not part of this standalone checkout. Prefer
+the `run.sh` commands in this directory when using this repo directly.
 
 ## Generate Repros From Quint Traces
 
@@ -163,3 +166,20 @@ Sanitized lane:
 ```
 
 This lane emits `case` / `diverge` lines and fails if any statement case diverges.
+
+## Run Serde Upstream Conformance
+
+Generate canonical serde traces and replay supported ones against upstream SQLite:
+
+```sh
+./quint/run.sh trace-conformance serde
+```
+
+Sanitized lane:
+
+```sh
+./quint/run.sh trace-conformance serde --sanitize
+```
+
+This lane emits `case` / `diverge` lines and fails if any supported serde case
+diverges.

@@ -445,46 +445,44 @@ module SqliteStmtApi {
   }
 
   val stmtBindResetRetainsPath =
-    state.scenario != BindResetRetains
-    or all {
-      state.stage == 4,
-      state.bindingsSet,
-      state.resetCalled,
-      state.firstStepRow,
-      state.secondStepRow,
-    }
+    (state.scenario == BindResetRetains) implies (
+      state.stage <= 4
+      and ((state.stage >= 1) implies state.bindingsSet)
+      and ((state.stage >= 2) implies state.firstStepRow)
+      and ((state.stage >= 3) implies state.resetCalled)
+      and ((state.stage >= 4) implies state.secondStepRow)
+    )
 
   val stmtClearBindingsNullPath =
-    state.scenario != ClearBindingsNull
-    or all {
-      state.stage == 5,
-      not(state.bindingsSet),
-      state.resetCalled,
-      state.clearCalled,
-      state.firstStepRow,
-      state.secondStepRow,
-    }
+    (state.scenario == ClearBindingsNull) implies (
+      state.stage <= 5
+      and ((state.stage >= 1 and state.stage <= 3) implies state.bindingsSet)
+      and ((state.stage >= 2) implies state.firstStepRow)
+      and ((state.stage >= 3) implies state.resetCalled)
+      and ((state.stage >= 4) implies (not(state.bindingsSet) and state.clearCalled))
+      and ((state.stage >= 5) implies state.secondStepRow)
+    )
 
   val stmtBindAfterStepMisusePath =
-    state.scenario != BindAfterStepMisuse
-    or all {
-      state.stage == 2,
-      state.misuseObserved,
-    }
+    (state.scenario == BindAfterStepMisuse) implies (
+      state.stage <= 2
+      and ((state.stage >= 1) implies state.firstStepRow)
+      and ((state.stage >= 2) implies state.misuseObserved)
+    )
 
   val stmtDataCountRowDonePath =
-    state.scenario != DataCountRowDone
-    or all {
-      state.stage == 4,
-      state.dataCountBeforeZero,
-      state.dataCountRowNonZero,
-      state.dataCountDoneZero,
-    }
+    (state.scenario == DataCountRowDone) implies (
+      state.stage <= 4
+      and ((state.stage >= 1) implies state.dataCountBeforeZero)
+      and ((state.stage >= 2) implies (state.firstStepRow and state.dataCountRowNonZero))
+      and ((state.stage >= 3) implies state.secondStepRow)
+      and ((state.stage >= 4) implies state.dataCountDoneZero)
+    )
 
   val stmtBlobZeroLengthNullPath =
-    state.scenario != BlobZeroLengthNull
-    or all {
-      state.stage == 2,
-      state.blobZeroIsNull,
-    }
+    (state.scenario == BlobZeroLengthNull) implies (
+      state.stage <= 2
+      and ((state.stage >= 1) implies state.firstStepRow)
+      and ((state.stage >= 2) implies state.blobZeroIsNull)
+    )
 }
